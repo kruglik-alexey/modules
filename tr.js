@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const babylon = require("babylon");
 const traverse = require("babel-traverse").default;
 const types = require("babel-types");
@@ -38,6 +39,7 @@ function amdWithTwoArgs(ast) {
                 var newDefine = defineCall({FUNC: newFunc});
 
                 path.replaceWith(newDefine);
+                ast.isChanged = true;
             }
         }
     });
@@ -57,6 +59,7 @@ function amdWithSingleArg(ast) {
                             path.replaceWith(moduleExports({
                                 EXPORT: path.node.argument
                             }));
+                            ast.isChanged = true;
                         }
                     }
                 });
@@ -73,14 +76,14 @@ function amdWithSingleArg(ast) {
                 }, []);
 
                 program.body = newBody;
+                ast.isChanged = true;
             }
         }
     });
 }
 
-function cjs(ast) {
+function cjsRequire(ast) {
     var imports = [];
-    var exports = [];
 
     traverse(ast, {
         VariableDeclaration(path) {
@@ -100,6 +103,7 @@ function cjs(ast) {
 
                     imports.push(imprt);
                     path.remove();
+                    ast.isChanged = true;
                 }
 
                 if (types.isCallExpression(initPath) && initPath.node.callee.name === 'require') {
@@ -118,7 +122,13 @@ function cjs(ast) {
                     }
                     imports.push(imprt);
                     path.remove();
+                    ast.isChanged = true;
                 }
+            }
+        },
+        CallExpression(path) {
+            if (path.node.callee.name == 'require' && !types.isProgram(path.getFunctionParent())) {
+                ast.hasInnerRequires = true;
             }
         }
     });
@@ -128,29 +138,71 @@ function cjs(ast) {
             if (imports !== null) {
                 var i = imports;
                 imports = null; // brake recursion
-                path.replaceWith(types.program(i.concat(path.node.body).concat(exports)));
+                if (i > 0) {
+                    path.replaceWith(types.program(i.concat(path.node.body)));
+                    ast.isChanged = true;
+                }
+            }
+        }
+    });
+}
+
+function cjsExports(ast) {
+    traverse(ast, {
+        AssignmentExpression(path) {
+            if (path.node.left.property && path.node.left.property.name === 'exports' && path.node.left.object.name === 'module') {
+                // TODO
+                if (false && types.isObjectExpression(path.get('right'))) {
+                    // parentPath is ExpressionStatement
+                    path.parentPath.replaceWith(types.exportAllDeclaration(path.node.right));
+                    ast.isChanged = true;
+                } else {
+                    // parentPath is ExpressionStatement
+                    path.parentPath.replaceWith(types.exportDefaultDeclaration(path.node.right));
+                    ast.isChanged = true;
+                }
             }
         }
     });
 }
 
 function transform(code) {
-    const ast = babylon.parse(code);
+    const ast = babylon.parse(code, {sourceType: 'module', plugins: ["jsx"]});
     amdWithTwoArgs(ast);
     amdWithSingleArg(ast);
-    cjs(ast);
-    return generate(ast, {}, code).code;
+    cjsRequire(ast);
+    cjsExports(ast);
+    return {
+        code: ast.isChanged ? generate(ast, {}, code).code : null,
+        hasInnerRequires: ast.hasInnerRequires || false,
+        isChanged: ast.isChanged
+    };
 }
 
-fs.readdir('./tests', (err, files) => {
-    files.sort().forEach(file => {
-        fs.readFile('./tests/' + file, function (err, data) {
-            if (err) {
-              throw err;
-            }
-            console.log(file);
-            console.log(transform(data.toString()));
-            console.log('---------');
-        });
+function walkSync(dir, filelist = []) {
+    fs.readdirSync(dir).forEach(file => {
+        const dirFile = path.join(dir, file);
+        try {
+            filelist = walkSync(dirFile, filelist);
+        }
+        catch (err) {
+            if (err.code === 'ENOTDIR' || err.code === 'EBUSY') filelist = [...filelist, dirFile];
+            else throw err;
+        }
+    });
+    return filelist;
+}
+
+walkSync('./tests').forEach(f => {
+if (!f.match(/.*\.js$/)) {
+        return;
+    }
+    fs.readFile(f, function(_, data) {
+        try {
+            var result = transform(data.toString());
+            console.log(result.isChanged ? 'TFD' : 'NOP', f, result.hasInnerRequires);
+        } catch(err) {
+            console.log('ERR', f);
+        }
     });
 })
