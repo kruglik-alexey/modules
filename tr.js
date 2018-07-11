@@ -195,8 +195,8 @@ function walkSync(dir, filelist = []) {
 
 const file = process.argv[2];
 
-walkSync('c:/targetprocess/tp/Code/Main/Tp.Web/JavaScript/tau/scripts').forEach(f => {
-if (!f.match(/.*\.js$/)) {
+walkSync('c:\\targetprocess\\tp-webpack4\\Code\\Main\\Tp.Web\\JavaScript\\tau\\scripts\\tau\\configurations').forEach(f => {
+    if (!f.match(/.*\.js$/)) {
         return;
     }
     if (file && f.indexOf(file) === -1) {
