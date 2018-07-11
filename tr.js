@@ -167,7 +167,7 @@ function cjsExports(ast) {
 }
 
 function transform(code) {
-    const ast = babylon.parse(code, {sourceType: 'module', plugins: ["jsx"]});
+    const ast = babylon.parse(code, {sourceType: 'module', plugins: ["jsx", "objectRestSpread"]});
     amdWithTwoArgs(ast);
     amdWithSingleArg(ast);
     cjsRequire(ast);
@@ -193,8 +193,13 @@ function walkSync(dir, filelist = []) {
     return filelist;
 }
 
+const file = process.argv[2];
+
 walkSync('./tests').forEach(f => {
 if (!f.match(/.*\.js$/)) {
+        return;
+    }
+    if (file && f.indexOf(file) === -1) {
         return;
     }
     fs.readFile(f, function(_, data) {
@@ -202,6 +207,7 @@ if (!f.match(/.*\.js$/)) {
             var result = transform(data.toString());
             console.log(result.isChanged ? 'TFD' : 'NOP', f, result.hasInnerRequires);
         } catch(err) {
+            console.log(err);
             console.log('ERR', f);
         }
     });
