@@ -195,7 +195,7 @@ function walkSync(dir, filelist = []) {
 
 const file = process.argv[2];
 
-walkSync('./tests').forEach(f => {
+walkSync('c:/targetprocess/tp/Code/Main/Tp.Web/JavaScript/tau/scripts').forEach(f => {
 if (!f.match(/.*\.js$/)) {
         return;
     }
@@ -205,7 +205,17 @@ if (!f.match(/.*\.js$/)) {
     fs.readFile(f, function(_, data) {
         try {
             var result = transform(data.toString());
-            console.log(result.isChanged ? 'TFD' : 'NOP', f, result.hasInnerRequires);
+            if (result.isChanged) {
+                if (result.hasInnerRequires) {
+                    console.log('IRQ', f);
+                } else {
+                    console.log('TRF', f);
+                    fs.writeFile(f, result.code, function() {
+                    });
+                }
+            } else {
+                console.log('NOP', f);
+            }
         } catch(err) {
             console.log(err);
             console.log('ERR', f);
