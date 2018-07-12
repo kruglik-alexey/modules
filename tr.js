@@ -87,42 +87,57 @@ function cjsRequire(ast) {
 
     traverse(ast, {
         VariableDeclaration(path) {
-            if (path.node.declarations.length === 1 && types.isProgram(path.getStatementParent().parentPath)) {
-                var declarationPath = path.get('declarations')[0];
-                var initPath = declarationPath.get('init');
-                var idPath = declarationPath.get('id');
+            if (types.isProgram(path.getStatementParent().parentPath)) {
+                var declarationPathesToRemove = [];
+                for (let i = 0; i < path.node.declarations.length; i++) {
+                    var declarationPath = path.get('declarations')[i];
+                    var initPath = declarationPath.get('init');
+                    var idPath = declarationPath.get('id');
 
-                if (types.isMemberExpression(initPath) &&
-                    initPath.node.property.name === 'default' &&
-                    types.isCallExpression(initPath.node.object) &&
-                    initPath.node.object.callee.name === 'require') {
+                    if (types.isMemberExpression(initPath) &&
+                        types.isCallExpression(initPath.node.object) &&
+                        initPath.node.object.callee.name === 'require') {
 
-                    var imprt = types.importDeclaration(
-                        [types.importDefaultSpecifier(idPath.node)],
-                        initPath.node.object.arguments[0]);
+                        if (initPath.node.property.name === 'default') {
+                            var imprt = types.importDeclaration(
+                                [types.importDefaultSpecifier(idPath.node)],
+                                initPath.node.object.arguments[0]);
 
-                    imports.push(imprt);
-                    path.remove();
-                    ast.isChanged = true;
-                }
+                            imports.push(imprt);
+                            declarationPathesToRemove.push(declarationPath);
+                            ast.isChanged = true;
+                        } else {
+                            var imprt = types.importDeclaration(
+                                [types.importSpecifier(types.identifier(initPath.node.property.name), types.identifier(initPath.node.property.name))],
+                                initPath.node.object.arguments[0]);
 
-                if (types.isCallExpression(initPath) && initPath.node.callee.name === 'require') {
-                    var imprt;
-                    if (types.isObjectPattern(idPath)) {
-                        var specifiers = idPath.get('properties').map(p => {
-                            return types.importSpecifier(p.get('key').node, p.get('key').node);
-                        });
-                        imprt = types.importDeclaration(
-                            specifiers,
-                            initPath.node.arguments[0]);
-                    } else {
-                        imprt = types.importDeclaration(
-                            [types.importDefaultSpecifier(idPath.node)],
-                            initPath.node.arguments[0]);
+                            imports.push(imprt);
+                            declarationPathesToRemove.push(declarationPath);
+                            ast.isChanged = true;
+                        }
                     }
-                    imports.push(imprt);
-                    path.remove();
-                    ast.isChanged = true;
+
+                    if (types.isCallExpression(initPath) && initPath.node.callee.name === 'require') {
+                        var imprt;
+                        if (types.isObjectPattern(idPath)) {
+                            var specifiers = idPath.get('properties').map(p => {
+                                return types.importSpecifier(p.get('key').node, p.get('key').node);
+                            });
+                            imprt = types.importDeclaration(
+                                specifiers,
+                                initPath.node.arguments[0]);
+                        } else {
+                            imprt = types.importDeclaration(
+                                [types.importDefaultSpecifier(idPath.node)],
+                                initPath.node.arguments[0]);
+                        }
+                        imports.push(imprt);
+                        declarationPathesToRemove.push(declarationPath);
+                        ast.isChanged = true;
+                    }
+                }
+                for (let i = 0; i < declarationPathesToRemove.length; i++) {
+                    declarationPathesToRemove[i].remove();
                 }
             }
         },
@@ -138,7 +153,7 @@ function cjsRequire(ast) {
             if (imports !== null) {
                 var i = imports;
                 imports = null; // brake recursion
-                if (i > 0) {
+                if (i.length > 0) {
                     path.replaceWith(types.program(i.concat(path.node.body)));
                     ast.isChanged = true;
                 }
@@ -195,7 +210,9 @@ function walkSync(dir, filelist = []) {
 
 const file = process.argv[2];
 
-walkSync('c:\\targetprocess\\tp-webpack4\\Code\\Main\\Tp.Web\\JavaScript\\tau\\scripts\\tau\\configurations').forEach(f => {
+let dir = 'c:\\targetprocess\\tp-webpack4\\Code\\Main\\Tp.Web\\JavaScript\\tau\\scripts\\tau\\configurations';
+dir = './tests';
+walkSync(dir).forEach(f => {
     if (!f.match(/.*\.js$/)) {
         return;
     }
@@ -210,8 +227,8 @@ walkSync('c:\\targetprocess\\tp-webpack4\\Code\\Main\\Tp.Web\\JavaScript\\tau\\s
                     console.log('IRQ', f);
                 } else {
                     console.log('TRF', f);
-                    fs.writeFile(f, result.code, function() {
-                    });
+                    console.log(result.code);
+                    //fs.writeFile(f, result.code, function() {  });
                 }
             } else {
                 console.log('NOP', f);
